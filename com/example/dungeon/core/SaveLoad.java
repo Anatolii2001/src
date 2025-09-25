@@ -41,10 +41,18 @@ public class SaveLoad {
                 if (parts.length == 2) map.put(parts[0], parts[1]);
             }
             Player p = s.getPlayer();
-            String[] pp = map.getOrDefault("player", "player;Hero;10;3").split(";");
-            p.setName(pp[1]);
-            p.setHp(Integer.parseInt(pp[2]));
-            p.setAttack(Integer.parseInt(pp[3]));
+            String playerStr = map.getOrDefault("player", "Герой;20;5");
+            String[] pp = playerStr.split(";");
+            if (pp.length >= 3) {
+                p.setName(pp[0]);  // Имя
+                p.setHp(Integer.parseInt(pp[1]));  // HP
+                p.setAttack(Integer.parseInt(pp[2]));  // Атака
+            } else {
+                // Fallback на дефолтные значения, если что-то пошло не так
+                p.setName("Герой");
+                p.setHp(20);
+                p.setAttack(5);
+            }
             p.getInventory().clear();
             String inv = map.getOrDefault("inventory", "");
             if (!inv.isBlank()) for (String tok : inv.split(",")) {
