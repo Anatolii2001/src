@@ -132,6 +132,62 @@ public class Game {
             }
         });
 
+        // 6. unlock <direction> — разблокировать выход ключом
+        commands.put("unlock", (ctx, a) -> {
+            if (a.isEmpty()) throw new InvalidCommandException("Укажите направление для разблокировки: unlock <north|south|east|west>");
+            String dir = a.get(0).toLowerCase(Locale.ROOT);
+            Room room = ctx.getCurrent();
+            if (!room.getLockedExits().containsKey(dir) || !room.getLockedExits().get(dir)) {
+                throw new InvalidCommandException("Выход '" + dir + "' не заблокирован или не существует.");
+            }
+            Player player = ctx.getPlayer();
+            Optional<Item> keyOpt = player.getInventory().stream()
+                    .filter(i -> i instanceof Key)
+                    .findFirst();
+            if (keyOpt.isEmpty()) throw new InvalidCommandException("У вас нет ключа для разблокировки!");
+            room.getLockedExits().put(dir, false);
+            player.getInventory().remove(keyOpt.get());
+            System.out.println("Дверь в направлении '" + dir + "' открыта! Ключ использован.");
+        });
+
+        // Изменена команда move: проверка на заблокированные выходы
+        commands.put("move", (ctx, a) -> {
+            if (a.isEmpty()) throw new InvalidCommandException("Укажите направление: north, south, east, west");
+            String dir = a.get(0).toLowerCase(Locale.ROOT);
+            Room current = ctx.getCurrent();
+            Room next = current.getNeighbors().get(dir);
+            if (next == null) throw new InvalidCommandException("Нет выхода в направлении: " + dir);
+            // Новое: проверка на блокировку
+            if (current.getLockedExits().getOrDefault(dir, false)) {
+                throw new InvalidCommandException("Выход '" + dir + "' заблокирован! Используйте 'unlock " + dir + "' с ключом.");
+            }
+            ctx.setCurrent(next);
+            System.out.println("Вы перешли в: " + next.getName());
+            System.out.println(next.describe());
+        });
+
+        // 7. alloc — демонстрация GC
+        commands.put("alloc", (ctx, a) -> {
+            Runtime rt = Runtime.getRuntime();
+            long free = rt.freeMemory(), total = rt.totalMemory(), used = total - free;
+            System.out.println("Статистика памяти ДО alloc: used=" + used + " free=" + free + " total=" + total);
+
+            System.out.println("Создаём 100 000 строк...");
+            List<String> list = new ArrayList<>();
+            for (int i = 0; i < 100000; i++) {
+                list.add("alloc_string_" + i);
+            }
+
+            free = rt.freeMemory(); total = rt.totalMemory(); used = total - free;
+            System.out.println("Статистика памяти ПОСЛЕ alloc (до GC): used=" + used + " free=" + free + " total=" + total);
+
+            System.out.println("Вызываем GC...");
+            System.gc();
+
+            free = rt.freeMemory(); total = rt.totalMemory(); used = total - free;
+            System.out.println("Статистика памяти ПОСЛЕ GC: used=" + used + " free=" + free + " total=" + total);
+        });
+
         commands.put("save", (ctx, a) -> SaveLoad.save(ctx));
         commands.put("load", (ctx, a) -> SaveLoad.load(ctx));
         commands.put("scores", (ctx, a) -> SaveLoad.printScores());
@@ -148,13 +204,26 @@ public class Game {
         Room square = new Room("Площадь", "Каменная площадь с фонтаном.");
         Room forest = new Room("Лес", "Шелест листвы и птичий щебет.");
         Room cave = new Room("Пещера", "Темно и сыро.");
+        Room dungeon = new Room("Подземелье", "Темное подземелье с сокровищами и загадками.");
+        dungeon.getLockedExits().put("north",true); //Заблокированный выход на север (к лесу)
+
         square.getNeighbors().put("north", forest);
         forest.getNeighbors().put("south", square);
         forest.getNeighbors().put("east", cave);
         cave.getNeighbors().put("west", forest);
+        //Связи для новой комнаты
+        dungeon.getNeighbors().put("north",forest); //Выход на север к лесу заблокирован
+        forest.getNeighbors().put("south",dungeon); //Обратная связь
 
         forest.getItems().add(new Potion("Малое зелье", 5));
+        forest.getItems().add(new Key("Ржавый ключ"));
         forest.setMonster(new Monster("Волк", 1, 8));
+        dungeon.getItems().add(new Weapon("Меч героя",3));
+
+        state.getAllRooms().add(square);
+        state.getAllRooms().add(forest);
+        state.getAllRooms().add(cave);
+        state.getAllRooms().add(dungeon);
 
         state.setCurrent(square);
     }

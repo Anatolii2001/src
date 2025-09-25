@@ -1,9 +1,13 @@
 package com.example.dungeon.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class GameState {
     private Player player;
     private Room current;
     private int score;
+    private List<Room> allRooms = new ArrayList<>(); //Новое поле для сериализации всех комнат
 
     public Player getPlayer() {
         return player;
@@ -27,5 +31,13 @@ public class GameState {
 
     public void addScore(int d) {
         this.score += d;
+    }
+
+    public List<Room> getAllRooms() {
+        return allRooms;
+    }
+
+    public void setAllRooms(List<Room> allRooms) {
+        this.allRooms = allRooms;
     }
 }

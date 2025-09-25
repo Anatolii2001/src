@@ -20,8 +20,25 @@ public class SaveLoad {
             String inv = p.getInventory().stream().map(i -> i.getClass().getSimpleName() + ":" + i.getName()).collect(Collectors.joining(","));
             w.write("inventory;" + inv);
             w.newLine();
+            w.write("current;" + s.getCurrent().getName());
+            w.newLine();
             w.write("room;" + s.getCurrent().getName());
             w.newLine();
+            for (Room room : s.getAllRooms()) {
+                String itemsStr = room.getItems().stream()
+                        .map(i -> i.getClass().getSimpleName() + ":" + i.getName())
+                        .collect(Collectors.joining(","));
+                String monsterStr = (room.getMonster() != null)
+                        ? room.getMonster().getName() + ";" + room.getMonster().getLevel() + ";" + room.getMonster().getHp()
+                        : "";
+                String neighborsStr = String.join(",", room.getNeighbors().keySet());
+                String lockedStr = room.getLockedExits().entrySet().stream()
+                        .filter(Map.Entry::getValue)
+                        .map(Map.Entry::getKey)
+                        .collect(Collectors.joining(","));
+                w.write("room;" + room.getName() + ";" + room.getDescription() + ";" + itemsStr + ";" + monsterStr + ";" + neighborsStr + ";" + lockedStr);
+                w.newLine();
+            }
             System.out.println("Сохранено в " + SAVE.toAbsolutePath());
             writeScore(p.getName(), s.getScore());
         } catch (IOException e) {
@@ -67,6 +84,71 @@ public class SaveLoad {
                 }
             }
             System.out.println("Игра загружена (упрощённо).");
+            // Новое: разбор комнат
+            List<Room> rooms = new ArrayList<>();
+            Map<String, Room> roomMap = new HashMap<>();
+            Map<String, String> roomData = new HashMap<>();  // Временное хранение для neighbors/locked
+            for (String line; (line = r.readLine()) != null; ) {
+                String[] parts = line.split(";", 7);  // room;name;desc;items;monster;neighbors;locked
+                if (parts.length >= 7 && "room".equals(parts[0])) {
+                    String name = parts[1];
+                    String desc = parts[2];
+                    Room room = new Room(name, desc);
+                    // Разбор items
+                    if (!parts[3].isBlank()) {
+                        for (String tok : parts[3].split(",")) {
+                            String[] t = tok.split(":", 2);
+                            if (t.length >= 2) {
+                                switch (t[0]) {
+                                    case "Potion" -> room.getItems().add(new Potion(t[1], 5));
+                                    case "Key" -> room.getItems().add(new Key(t[1]));
+                                    case "Weapon" -> room.getItems().add(new Weapon(t[1], 3));
+                                }
+                            }
+                        }
+                    }
+                    // Разбор monster
+                    if (!parts[4].isBlank()) {
+                        String[] mParts = parts[4].split(";");
+                        if (mParts.length >= 3) {
+                            room.setMonster(new Monster(mParts[0], Integer.parseInt(mParts[1]), Integer.parseInt(mParts[2])));
+                        }
+                    }
+                    rooms.add(room);
+                    roomMap.put(name, room);
+                    // Сохраняем neighbors и locked для позднего разбора
+                    roomData.put(name + "_neighbors", parts[5]);
+                    roomData.put(name + "_locked", parts[6]);
+                } else if (parts.length >= 2) {
+                    map.put(parts[0], parts[1]);  // Для current и др.
+                }
+            }
+            // После создания всех комнат: восстанавливаем neighbors и locked
+            for (Room room : rooms) {
+                String neighborsStr = roomData.get(room.getName() + "_neighbors");
+                if (neighborsStr != null && !neighborsStr.isBlank()) {
+                    for (String dir : neighborsStr.split(",")) {
+                        // Простая логика: предполагаем, что соседи симметричны
+                        Room neighbor = roomMap.get(room.getName().equals("Площадь") && dir.equals("north") ? "Лес" :
+                                room.getName().equals("Лес") && dir.equals("south") ? "Площадь" :
+                                        room.getName().equals("Лес") && dir.equals("east") ? "Пещера" :
+                                                room.getName().equals("Пещера") && dir.equals("west") ? "Лес" :
+                                                        room.getName().equals("Подземелье") && dir.equals("north") ? "Лес" :
+                                                                room.getName().equals("Лес") && dir.equals("south") ? "Подземелье" : null);
+                        if (neighbor != null) room.getNeighbors().put(dir, neighbor);
+                    }
+                }
+                String lockedStr = roomData.get(room.getName() + "_locked");
+                if (lockedStr != null && !lockedStr.isBlank()) {
+                    for (String dir : lockedStr.split(",")) {
+                        room.getLockedExits().put(dir, true);
+                    }
+                }
+            }
+            s.setAllRooms(rooms);
+            // Устанавливаем текущую комнату
+            String currentName = map.getOrDefault("current", "Площадь");
+            s.setCurrent(roomMap.get(currentName));
         } catch (IOException e) {
             throw new UncheckedIOException("Не удалось загрузить игру", e);
         }
